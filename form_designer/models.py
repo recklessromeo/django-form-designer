@@ -1,18 +1,22 @@
-import re
-import hashlib, uuid
-from decimal import Decimal
+from form_designer.fields import TemplateTextField, TemplateCharField, ModelNameField, RegexpExpressionField
+from form_designer.utils import get_class
+from form_designer import settings
 
 from django.db import models
-from django.utils.translation import ugettext, ugettext_lazy as _
-from django.forms import widgets
-from django.core.mail import send_mail
+from django.utils.translation import ugettext_lazy as _
 from django.conf import settings as django_settings
 from django.contrib.auth.models import User
 from django.utils.datastructures import SortedDict
 
+from decimal import Decimal
+
 from form_designer.fields import TemplateTextField, TemplateCharField, ModelNameField, RegexpExpressionField
 from form_designer.utils import get_class
 from form_designer import settings
+
+import re
+import uuid
+import hashlib
 
 if settings.VALUE_PICKLEFIELD:
     from picklefield.fields import PickledObjectField
@@ -24,7 +28,7 @@ class FormValueDict(dict):
         self['value'] = value
         self['label'] = label
         super(FormValueDict, self).__init__()
-        
+
 
 class FormDefinition(models.Model):
     name = models.SlugField(_('name'), max_length=255, unique=True)
@@ -38,11 +42,18 @@ class FormDefinition(models.Model):
     mail_from = TemplateCharField(_('sender address'), max_length=255, help_text=('Your form fields are available as template context. Example: "{{ first_name }} {{ last_name }} <{{ from_email }}>" if you have fields named `first_name`, `last_name`, `from_email`.'), blank=True, null=True)
     mail_subject = TemplateCharField(_('email subject'), max_length=255, help_text=('Your form fields are available as template context. Example: "Contact form {{ subject }}" if you have a field named `subject`.'), blank=True, null=True)
     mail_uploaded_files  = models.BooleanField(_('Send uploaded files as email attachments'), default=True)
+    mail_report_files  = models.BooleanField(_('Send xls or csv as email attachments'), default=False)
+    mail_replay    = models.BooleanField(_('Send to replay an email to User with Template'), default=False)
+    replay_mail_to = TemplateCharField(_('Send form data to e-mail address'), help_text=('Separate several addresses with a comma. Your form fields are available as template context. Example: "admin@domain.com, {{ from_email }}" if you have a field named `from_email`.'), max_length=255, blank=True, null=True)
+    replay_subject = models.CharField(_('Replay Subject'), max_length=255, blank=True, null=True)
+    replay_body    = TemplateTextField(_('Replay Body Messages'), blank=True, null=True)
     method = models.CharField(_('method'), max_length=10, default="POST", choices = (('POST', 'POST'), ('GET', 'GET')))
     success_message = models.CharField(_('success message'), max_length=255, blank=True, null=True)
     error_message = models.CharField(_('error message'), max_length=255, blank=True, null=True)
     submit_label = models.CharField(_('submit button label'), max_length=255, blank=True, null=True)
     log_data = models.BooleanField(_('log form data'), help_text=_('Logs all form submissions to the database.'), default=True)
+    log_data_to_model = models.BooleanField(_('log form data to model'), help_text=_('Logs all form submissions to the database on Model.'), default=True)
+    model_class_name  = ModelNameField(_('model class name'), max_length=255, blank=True, null=True)
     save_uploaded_files  = models.BooleanField(_('save uploaded files'), help_text=_('Saves all uploaded files using server storage.'), default=True)
     success_redirect = models.BooleanField(_('HTTP redirect after successful submission'), default=True)
     success_clear = models.BooleanField(_('clear form after successful submission'), default=True)
@@ -64,7 +75,6 @@ class FormDefinition(models.Model):
 
     def get_field_dict(self):
         field_dict = SortedDict()
-        names = []
         for field in self.formdefinitionfield_set.all():
             field_dict[field.name] = field
         return field_dict
@@ -101,7 +111,9 @@ class FormDefinition(models.Model):
         # TODO: refactor, move to utils
         from django.template.loader import get_template
         from django.template import Context, Template
-        if template:
+        if template and hasattr(template, 'name'): #dm
+            t = template
+        elif template:
             t = get_template(template)
         elif not self.message_template:
             t = get_template('txt/formdefinition/data_message.txt')
@@ -121,9 +133,22 @@ class FormDefinition(models.Model):
     def log(self, form, user=None):
         form_data = self.get_form_data(form)
         created_by = None
+
         if user and user.is_authenticated():
             created_by = user
-        FormLog(form_definition=self, data=form_data, created_by=created_by).save()
+
+        log_entry = FormLog(form_definition=self, data=form_data,created_by=created_by)
+        log_entry.save()
+
+        return log_entry
+
+    def data_to_model_db(self,form,user=None):
+        model = ModelNameField.get_model_from_string(self.model_class_name)
+        data = form.cleaned_data
+        data.pop('submit__VideoForm')
+        new_model = model(**data)
+        new_model.save()
+        return new_model
 
     def string_template_replace(self, text, context_dict):
         # TODO: refactor, move to utils
@@ -153,19 +178,93 @@ class FormDefinition(models.Model):
         else:
             mail_subject = self.title
 
+        import logging
+        logging.debug('Mail: '+repr(mail_from)+' --> '+repr(mail_to));
+
         from django.core.mail import EmailMessage
         message = EmailMessage(mail_subject, message, mail_from or None, mail_to)
 
         if self.mail_uploaded_files:
             for file_path in files:
                 message.attach_file(file_path)
+        #dm: added metods
+        if self.mail_report_files:
+            qs = FormLog.objects.all()#filter(form_definition = self)
+            file_path = self.export_xcl(qs)
+            message.attach_file(file_path)
 
         message.send(fail_silently=False)
+
+        #email replay to submitter
+        if self.mail_replay:
+            if self.replay_subject:
+                replay_subject = self.string_template_replace(self.replay_subject, context_dict)
+            else:
+                replay_subject = self.title
+
+            replay_mail_to = re.compile('\s*[,;]+\s*').split(self.replay_mail_to)
+            for key, email in enumerate(replay_mail_to):
+                replay_mail_to[key] = self.string_template_replace(email, context_dict)
+
+            logging.debug('Mail replay: '+repr(self.mail_replay)+' --> '+repr(replay_mail_to));
+
+            from django.template import Template
+            replay_body_message = self.compile_message(form_data, Template(self.replay_body) )
+
+            replay_message = EmailMessage(replay_subject, replay_body_message, mail_from or None, replay_mail_to)
+            replay_message.send(fail_silently=False)
+
+
+
+
+    def export_xcl(self,qs):
+        try:  import xlwt
+        except ImportError: xlwt_installed = False
+        else: xlwt_installed = True
+        wb = xlwt.Workbook()
+        ws = wb.add_sheet(unicode(self._meta.verbose_name_plural))
+        distinct_forms = qs.aggregate(Count('form_definition', distinct=True))['form_definition__count']
+
+        include_created = settings.CSV_EXPORT_INCLUDE_CREATED
+        include_pk = settings.CSV_EXPORT_INCLUDE_PK
+        include_header = settings.CSV_EXPORT_INCLUDE_HEADER and distinct_forms == 1
+        include_form = settings.CSV_EXPORT_INCLUDE_FORM and distinct_forms > 1
+        if include_header:
+            header = []
+            if include_form:    header.append('Form')
+            if include_created: header.append('Created')
+            if include_pk:      header.append('ID')
+            for field in qs[0].data:
+                header.append(field['label'] if field['label'] else field['key'])
+            for i, f in enumerate(header):
+                try:
+                    ws.write(0, i, smart_unicode(f, encoding=settings.CSV_EXPORT_ENCODING))
+                except :
+                    ws.write(0, i, smart_unicode("boh", encoding=settings.CSV_EXPORT_ENCODING))
+        for i, entry in enumerate(qs):
+            row = []
+            if include_form:
+                row.append(entry.form_definition)
+            if include_created:
+                row.append(entry.created)
+            if include_pk:
+                row.append(entry.pk)
+            for field in entry.data:
+                value = friendly(field['value'])
+                row.append(smart_unicode(
+                    value, encoding=settings.CSV_EXPORT_ENCODING))
+            for j, cell in enumerate(row):
+                ws.write(i+1, j, smart_unicode(cell))
+
+        file_path = os.path.join(sett.MEDIA_ROOT,'report.xls' )
+        wb.save(file_path)
+        return file_path
+
 
     @property
     def submit_flag_name(self):
         name = settings.SUBMIT_FLAG_NAME % self.name
-        # make sure we are not overriding one of the actual form fields 
+        # make sure we are not overriding one of the actual form fields
         while self.formdefinitionfield_set.filter(name__exact=name).count() > 0:
             name += '_'
         return name
@@ -201,6 +300,11 @@ class FormDefinitionField(models.Model):
     choice_model = ModelNameField(_('data model'), max_length=255, blank=True, null=True, choices=choice_model_choices, help_text=('your_app.models.ModelName' if not choice_model_choices else None))
     choice_model_empty_label = models.CharField(_('empty label'), max_length=255, blank=True, null=True)
 
+    #added by dm
+    localized = models.BooleanField(_('Localized Format'), help_text=('If this is True, the field value get settings from Localization.'), default=False)
+
+    objects = models.Manager()
+
     class Meta:
         verbose_name = _('field')
         verbose_name_plural = _('fields')
@@ -214,7 +318,7 @@ class FormDefinitionField(models.Model):
     def ____init__(self, field_class=None, name=None, required=None, widget=None, label=None, initial=None, help_text=None, *args, **kwargs):
         super(FormDefinitionField, self).__init__(*args, **kwargs)
         self.name = name
-        self.field_class = field_class  
+        self.field_class = field_class
         self.required = required
         self.widget = widget
         self.label = label
@@ -228,7 +332,10 @@ class FormDefinitionField(models.Model):
             'initial': self.initial if self.initial else None,
             'help_text': self.help_text,
         }
-
+#        if self.localized:
+#            args.update({
+#                'localize': True,
+#            })
         if self.field_class in ('django.forms.CharField', 'django.forms.EmailField', 'django.forms.RegexField'):
             args.update({
                 'max_length': self.max_length,
@@ -296,11 +403,19 @@ class FormLog(models.Model):
     form_definition = models.ForeignKey(FormDefinition, related_name='logs')
     created = models.DateTimeField(_('Created'), auto_now=True)
     created_by = models.ForeignKey(User, null=True, blank=True)
+    #dm
+    #model_create = models.BooleanField(default=False)
+
     _data = None
+    #data = PickledObjectField(_('Data'), null=True, blank=True)
+    class Meta:
+        verbose_name = _('Form log')
+        verbose_name_plural = _('Form logs')
+        ordering = ['-created']
 
     def __unicode__(self):
         return "%s (%s)" % (self.form_definition.title or  \
-            self.form_definition.name, self.created) 
+            self.form_definition.name, self.created)
 
     def get_data(self):
         if self._data:
@@ -346,7 +461,7 @@ class FormLog(models.Model):
 
     def save(self, *args, **kwargs):
         super(FormLog, self).save(*args, **kwargs)
-        if self._data: 
+        if self._data:
             # safe form data and then clear temporary variable
             for value in self.values.all():
                 value.delete()
@@ -367,7 +482,7 @@ class FormValue(models.Model):
         value = PickledObjectField(_('value'), null=True, blank=True)
     else:
         # otherwise just use a TextField, with the drawback that
-        # all values will just be stored as unicode strings, 
+        # all values will just be stored as unicode strings,
         # but you can easily query the database for form results.
         value = models.TextField(_('value'), null=True, blank=True)
 

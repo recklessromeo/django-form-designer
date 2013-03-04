@@ -22,6 +22,9 @@ FIELD_CLASSES = getattr(settings, 'FORM_DESIGNER_FIELD_CLASSES', (
     ('django.forms.ModelMultipleChoiceField', _('Model Multiple Choice')),
     ('django.forms.RegexField', _('Regex')),
     ('django.forms.FileField', _('File')),
+    ('form_designer.fields.CharFieldRO', _('Char Read Only')),
+    ('form_designer.fields.TextFieldRO', _('Text Read Only')),
+    ('form_designer.fields.StateField', _('Country')),
     # ('captcha.fields.CaptchaField', _('Captcha')),
 ))
 
@@ -31,6 +34,8 @@ WIDGET_CLASSES = getattr(settings, 'FORM_DESIGNER_WIDGET_CLASSES', (
     ('django.forms.widgets.PasswordInput', _('Password input')),
     ('django.forms.widgets.HiddenInput', _('Hidden input')),
     ('django.forms.widgets.RadioSelect', _('Radio button')),
+    ('form_designer.forms.RadioSelectCustom', _('Radio Oriz button')),
+    ('django.forms.widgets.CheckboxSelectMultiple', _('Radio Checkbox Multiple')),
 ))
 
 EXPORTER_CLASSES = getattr(settings, 'FORM_DESIGNER_WIDGET_CLASSES', (
@@ -66,6 +71,8 @@ CSV_EXPORT_INCLUDE_HEADER = getattr(settings, 'FORM_DESIGNER_CSV_EXPORT_INCLUDE_
 
 # include form title if exporting logs for more than one form
 CSV_EXPORT_INCLUDE_FORM = getattr(settings, 'FORM_DESIGNER_CSV_EXPORT_INCLUDE_FORM', True)
+
+CSV_EXPORT_FILENAME = getattr(settings, 'FORM_DESIGNER_CSV_EXPORT_FILENAME', 'export.csv')
 
 CSV_EXPORT_ENCODING = getattr(settings, 'FORM_DESIGNER_CSV_EXPORT_ENCODING', 'utf-8')
 

@@ -15,8 +15,8 @@ class FormDefinitionFieldInline(admin.StackedInline):
     model = FormDefinitionField
     extra = 1
     fieldsets = [
-        (_('Basic'), {'fields': ['name', 'field_class', 'required', 'initial']}),
-        (_('Display'), {'fields': ['label', 'widget', 'help_text', 'position', 'include_result']}),
+        (_('Basic'), {'fields': ['name', 'field_class', 'required', 'initial']}),#'localized'
+        (_('Display'), {'fields': ['label', 'widget', 'help_text', 'position', 'include_result',]}),
         (_('Text'), {'fields': ['max_length', 'min_length']}),
         (_('Numbers'), {'fields': ['max_value', 'min_value', 'max_digits', 'decimal_places']}),
         (_('Regex'), {'fields': ['regex']}),
@@ -32,12 +32,15 @@ class FormDefinitionAdmin(admin.ModelAdmin):
         (_('Mail form'), {'fields': ['mail_to', 'mail_from', 'mail_subject', 'mail_uploaded_files'], 'classes': ['collapse']}),
         (_('Templates'), {'fields': ['message_template', 'form_template_name'], 'classes': ['collapse']}),
         (_('Messages'), {'fields': ['success_message', 'error_message', 'submit_label'], 'classes': ['collapse']}),
+        (_('Model related'), {'fields': ['log_data_to_model', 'model_class_name', ], 'classes': ['collapse']}),
     ]
     list_display = ('name', 'title', 'method', 'count_fields')
     form = FormDefinitionForm
     inlines = [
         FormDefinitionFieldInline,
     ]
+    save_as = True
+    save_on_top = True
 
 
 class FormLogAdmin(admin.ModelAdmin):
@@ -112,5 +115,36 @@ class FormLogAdmin(admin.ModelAdmin):
         return super(FormLogAdmin, self).changelist_view(request, extra_context)
 
 
+
+class FormDefinitionFieldInlineTabular(admin.TabularInline):
+    form = FormDefinitionFieldInlineForm
+    model = FormDefinitionField
+    extra = 1
+    fields = ['name', 'field_class', 'widget', 'label','help_text','position','required','include_result','localized' ]
+#        (_('Text'), {'fields': ['max_length', 'min_length'],  'classes': ('collapse',) }),
+#        (_('Numbers'), {'fields': ['max_value', 'min_value', 'max_digits', 'decimal_places'], 'classes': ('collapse',) }),
+#        (_('Regex'), {'fields': ['regex'], 'classes': ('collapse',) }),
+#        (_('Choices'), {'fields': ['choice_values', 'choice_labels'], 'classes': ('collapse',) }),
+#        (_('Model Choices'), {'fields': ['choice_model', 'choice_model_empty_label'], 'classes': ('collapse',) }),aa
+
+from admin_manager.buttons_admin.button_admin import ButtonAdmin
+class FormDefinitionAdminTab(ButtonAdmin,FormDefinitionAdmin):
+    inlines = [
+        FormDefinitionFieldInlineTabular,
+        ]
+    def linkselfview(self,obj):
+        print "Call" #obj.sendmail()
+    linkselfview.short_description = "aaasaa"
+    #    #link_self_view.allow_tags = True
+    #
+    buttons = ['linkselfview',]
+
+class FormDefinitionProxy(FormDefinition):
+    class Meta:
+        proxy = True
+        verbose_name = 'Form Tab'
+        verbose_name_plural = 'Forms Tab'
+
 admin.site.register(FormDefinition, FormDefinitionAdmin)
+#admin.site.register(FormDefinitionProxy, FormDefinitionAdminTab)
 admin.site.register(FormLog, FormLogAdmin)

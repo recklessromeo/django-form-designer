@@ -90,3 +90,38 @@ class RegexpExpressionField(models.CharField):
         defaults = {'form_class': RegexpExpressionFormField}
         defaults.update(kwargs)
         return super(RegexpExpressionField, self).formfield(**defaults)
+
+class CharFieldRO(forms.CharField):
+
+    widget=forms.TextInput(attrs={'class':'disabled', 'readonly':'readonly'})
+    def clean(self, value):
+        """
+        Validates that the input matches the regular expression. Returns a
+        Unicode object.
+        """
+        value = super(CharFieldRO, self).clean(value)
+        if value == u'':
+            return value
+        return value
+
+class TextFieldRO(forms.CharField):
+
+    widget=forms.widgets.Textarea(attrs={'class':'disabled', 'readonly':'readonly'})
+    def clean(self, value):
+        """
+        Validates that the input matches the regular expression. Returns a
+        Unicode object.
+        """
+        value = super(TextFieldRO, self).clean(value)
+        if value == u'':
+            return value
+        return value
+
+from countryfield import COUNTRIES
+class StateField(forms.ChoiceField):
+
+    def __init__(self, choices= COUNTRIES, required=True, widget=None, label=None,
+                 initial=None, help_text=None, *args, **kwargs):
+        super(forms.ChoiceField, self).__init__(required=required, widget=widget, label=label,
+                                        initial=initial, help_text=help_text, *args, **kwargs)
+        self.choices = choices

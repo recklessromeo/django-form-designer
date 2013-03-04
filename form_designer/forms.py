@@ -3,7 +3,9 @@ import os
 from django import forms
 from django.forms import widgets
 from django.conf import settings as django_settings
+from django.utils.encoding import force_unicode, StrAndUnicode
 from django.utils.translation import ugettext as _
+from django.utils.safestring import mark_safe
 
 from form_designer import settings
 from form_designer.models import FormDefinitionField, FormDefinition
@@ -72,3 +74,16 @@ class FormDefinitionForm(forms.ModelForm):
             [os.path.join(settings.STATIC_URL, path) for path in plugins])
         return forms.Media(js=js)
     media = property(_media)
+
+
+class RadioFieldRendererCustom(widgets.RadioFieldRenderer):
+    """
+    An object used by RadioSelect to enable customization of radio widgets.
+    """
+    def render(self):
+        """Outputs a <ul> for this set of radio fields."""
+        return mark_safe(u'<span class="radio">%s</span>\n' % u'\n'.join([u'%s'
+                % force_unicode(w) for w in self]))
+
+class RadioSelectCustom(widgets.RadioSelect):
+    renderer = RadioFieldRendererCustom
