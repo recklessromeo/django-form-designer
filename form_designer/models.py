@@ -39,6 +39,7 @@ class FormValueDict(dict):
 
 class FormDefinition(models.Model):
     name = models.SlugField(_('name'), max_length=255, unique=True)
+    use_djangular = models.BooleanField(_('use django-angular form validation'), default=False)
     require_hash = models.BooleanField(_('obfuscate URL to this form'), default=False, help_text=_('If enabled, the form can only be reached via a secret URL.'))
     private_hash = models.CharField(editable=False, max_length=40, default='')
     public_hash = models.CharField(editable=False, max_length=40, default='')

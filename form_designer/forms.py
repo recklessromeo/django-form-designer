@@ -1,3 +1,7 @@
+from importlib import import_module
+from djangular.forms.angular_base import TupleErrorList
+from djangular.forms.angular_validation import NgFormValidationMixin
+from djangular.styling.bootstrap3.forms import Bootstrap3FormMixin
 import os
 
 from django import forms
@@ -30,10 +34,36 @@ class DesignedForm(forms.Form):
         self.fields[def_field.name] = field
         if isinstance(field, forms.FileField):
             self.file_fields.append(def_field)
+        return field
 
     def clean(self):
         return clean_files(self)
-        
+
+
+class AngularValidationForm(NgFormValidationMixin, Bootstrap3FormMixin, DesignedForm):
+    form_error_css_classes = 'djng-form-errors'
+    field_error_css_classes = 'djng-field-errors'
+    field_mixins_module = field_mixins_fallback_module = 'djangular.forms.field_mixins'
+    form_name = 'miha'
+
+    def __new__(cls, *args, **kwargs):
+        return super(DesignedForm, cls).__new__(cls, **kwargs)
+
+    def add_defined_field(self, def_field, initial_data=None):
+        field = super(AngularValidationForm, self).add_defined_field(def_field, initial_data)
+        field_mixins_module = import_module(self.field_mixins_module)
+        field_mixins_fallback_module = import_module(self.field_mixins_fallback_module)
+        # add additional methods to django.form.fields at runtime
+        FieldMixinName = field.__class__.__name__ + 'Mixin'
+        try:
+            FieldMixin = getattr(field_mixins_module, FieldMixinName)
+        except AttributeError:
+            try:
+                FieldMixin = getattr(field_mixins_fallback_module, FieldMixinName)
+            except AttributeError:
+                FieldMixin = field_mixins_fallback_module.DefaultFieldMixin
+        field.__class__ = type(field.__class__.__name__, (FieldMixin, field.__class__), {})
+
 
 class FormDefinitionFieldInlineForm(forms.ModelForm):
     class Meta:
