@@ -46,6 +46,10 @@ class AngularValidationForm(NgFormValidationMixin, Bootstrap3FormMixin, Designed
     field_mixins_module = field_mixins_fallback_module = 'djangular.forms.field_mixins'
     form_name = 'miha'
 
+    def __init__(self, form_definition, *args, **kwargs):
+        super(AngularValidationForm, self).__init__(form_definition, *args, **kwargs)
+        self.fields.pop(form_definition.submit_flag_name)
+
     def __new__(cls, *args, **kwargs):
         return super(DesignedForm, cls).__new__(cls, **kwargs)
 
