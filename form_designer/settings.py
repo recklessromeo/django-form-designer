@@ -38,7 +38,7 @@ WIDGET_CLASSES = getattr(settings, 'FORM_DESIGNER_WIDGET_CLASSES', (
     ('django.forms.widgets.CheckboxSelectMultiple', _('Radio Checkbox Multiple')),
 ))
 
-EXPORTER_CLASSES = getattr(settings, 'FORM_DESIGNER_WIDGET_CLASSES', (
+EXPORTER_CLASSES = getattr(settings, 'FORM_DESIGNER_EXPORTER_CLASSES', (
     'form_designer.contrib.exporters.csv_exporter.CsvExporter',
     'form_designer.contrib.exporters.xls_exporter.XlsExporter',
 ))
@@ -46,6 +46,7 @@ EXPORTER_CLASSES = getattr(settings, 'FORM_DESIGNER_WIDGET_CLASSES', (
 FORM_TEMPLATES = getattr(settings, 'FORM_DESIGNER_FORM_TEMPLATES', (
     ('', _('Default')),
     ('html/formdefinition/forms/as_p.html', _('as paragraphs')),
+    ('html/formdefinition/forms/as_div.html', _('Djangular')),
     ('html/formdefinition/forms/as_table.html', _('as table')),
     ('html/formdefinition/forms/as_table_h.html', _('as table (horizontal)')),
     ('html/formdefinition/forms/as_ul.html', _('as unordered list')),
@@ -93,5 +94,8 @@ ALLOWED_FILE_TYPES = getattr(settings, 'FORM_DESIGNER_ALLOWED_FILE_TYPES', (
 ))
 
 MAX_UPLOAD_SIZE = getattr(settings, 'MAX_UPLOAD_SIZE', 5242880) # 5M
+MAX_UPLOAD_TOTAL_SIZE = getattr(settings, 'MAX_UPLOAD_TOTAL_SIZE', 10485760) # 10M
 
-VALUE_PICKLEFIELD = getattr(settings, 'FORM_DESIGNER_VALUE_PICKLEFIELD', False)
+# If true, submitted values won't be stored as strings, but serialized to a PickleField,
+# preserving the original type.
+VALUE_PICKLEFIELD = getattr(settings, 'FORM_DESIGNER_VALUE_PICKLEFIELD', True)
